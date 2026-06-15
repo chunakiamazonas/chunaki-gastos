@@ -65,6 +65,7 @@ module.exports = async function handler(req, res) {
           stream.end(buffer);
 
           const uploaded = await drive.files.create({
+            supportsAllDrives: true,
             requestBody: {
               name: fileName,
               parents: [DRIVE_FOLDER_ID],
@@ -78,6 +79,7 @@ module.exports = async function handler(req, res) {
 
           await drive.permissions.create({
             fileId: uploaded.data.id,
+            supportsAllDrives: true,
             requestBody: { role: 'reader', type: 'anyone' },
           });
 
@@ -119,4 +121,3 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 };
-
