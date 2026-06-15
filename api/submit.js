@@ -14,6 +14,29 @@ function getAuth() {
   });
 }
 
+async function getOrCreateMonthFolder(drive, date) {
+  const month = date.slice(0, 7); // e.g. "2026-06"
+  const res = await drive.files.list({
+    q: `name='${month}' and mimeType='application/vnd.google-apps.folder' and '${DRIVE_FOLDER_ID}' in parents and trashed=false`,
+    fields: 'files(id)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  if (res.data.files && res.data.files.length > 0) {
+    return res.data.files[0].id;
+  }
+  const folder = await drive.files.create({
+    supportsAllDrives: true,
+    requestBody: {
+      name: month,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [DRIVE_FOLDER_ID],
+    },
+    fields: 'id',
+  });
+  return folder.data.id;
+}
+
 async function ensureHeaders(sheets) {
   try {
     const res = await sheets.spreadsheets.values.get({
@@ -48,6 +71,8 @@ module.exports = async function handler(req, res) {
     await ensureHeaders(sheets);
 
     const { guide, groupName, date, activities, fuelEstimated, fuelActual, fuelConfirmed, invoices } = req.body;
+
+    const monthFolderId = await getOrCreateMonthFolder(drive, date);
     const rows = [];
 
     for (let i = 0; i < activities.length; i++) {
@@ -68,7 +93,7 @@ module.exports = async function handler(req, res) {
             supportsAllDrives: true,
             requestBody: {
               name: fileName,
-              parents: [DRIVE_FOLDER_ID],
+              parents: [monthFolderId],
             },
             media: {
               mimeType: invoice.mimeType,
