@@ -1,0 +1,8 @@
+{
+  "name": "Chunaki Gastos",
+  "short_name": "Chunaki",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F5F0E8",
+  "theme_color": "#2D4A1E"
+}
