@@ -1,6 +1,9 @@
 {
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" }
-  ]
+  ],
+  "functions": {
+    "api/scan.js": { "maxDuration": 30 },
+    "api/submit.js": { "maxDuration": 30 }
+  }
 }
-
