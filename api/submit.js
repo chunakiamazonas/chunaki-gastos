@@ -113,7 +113,7 @@ module.exports = async function handler(req, res) {
           console.log('Photo uploaded:', photoLink);
         } catch(photoErr) {
           console.error('Photo upload error:', photoErr.message);
-          photoLink = 'Error al subir foto';
+          photoLink = 'ERROR: ' + photoErr.message;
         }
       }
 
