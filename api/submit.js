@@ -1,7 +1,7 @@
 const { google } = require('googleapis');
 
 const SPREADSHEET_ID = '1TZRX2KjoH7igdMEuW1Yb8LxESILrhVhfUdiwXOf4K9w';
-const DRIVE_FOLDER_ID = '1SS5M6_KTXB9FzU65ALggHOpd5EVl-YKN';
+const DRIVE_FOLDER_ID = '1f2YRsYSQHBx6wddHcaxw5m3_hLstAnwE';
 
 function getAuth() {
   const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
