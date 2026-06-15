@@ -1,6 +1,7 @@
 const { google } = require('googleapis');
 
 const SPREADSHEET_ID = '1TZRX2KjoH7igdMEuW1Yb8LxESILrhVhfUdiwXOf4K9w';
+const YOUR_EMAIL = 'juanestebanenciso94@gmail.com';
 const DRIVE_FOLDER_NAME = 'Chunaki Facturas';
 
 function getAuth() {
@@ -19,10 +20,20 @@ async function getOrCreateFolder(drive) {
     q: `name='${DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
     fields: 'files(id)',
   });
-  if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
+  if (res.data.files && res.data.files.length > 0) {
+    return res.data.files[0].id;
+  }
   const folder = await drive.files.create({
-    requestBody: { name: DRIVE_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' },
+    requestBody: {
+      name: DRIVE_FOLDER_NAME,
+      mimeType: 'application/vnd.google-apps.folder',
+    },
     fields: 'id',
+  });
+  // Share folder with your personal email
+  await drive.permissions.create({
+    fileId: folder.data.id,
+    requestBody: { role: 'writer', type: 'user', emailAddress: YOUR_EMAIL },
   });
   return folder.data.id;
 }
@@ -71,22 +82,38 @@ module.exports = async function handler(req, res) {
 
       if (invoice.base64 && invoice.mimeType) {
         try {
-          const { Readable } = require('stream');
           const buffer = Buffer.from(invoice.base64, 'base64');
           const ext = invoice.mimeType.split('/')[1] || 'jpg';
           const fileName = `${date}_${guide}_act${i + 1}.${ext}`;
+
+          // Use buffer directly as a readable stream
+          const { PassThrough } = require('stream');
+          const stream = new PassThrough();
+          stream.end(buffer);
+
           const uploaded = await drive.files.create({
-            requestBody: { name: fileName, parents: [folderId] },
-            media: { mimeType: invoice.mimeType, body: Readable.from(buffer) },
+            requestBody: {
+              name: fileName,
+              parents: [folderId],
+            },
+            media: {
+              mimeType: invoice.mimeType,
+              body: stream,
+            },
             fields: 'id, webViewLink',
           });
+
+          // Make readable by anyone
           await drive.permissions.create({
             fileId: uploaded.data.id,
             requestBody: { role: 'reader', type: 'anyone' },
           });
+
           photoLink = uploaded.data.webViewLink || '';
+          console.log('Photo uploaded:', photoLink);
         } catch(photoErr) {
           console.error('Photo upload error:', photoErr.message);
+          photoLink = 'Error al subir foto';
         }
       }
 
