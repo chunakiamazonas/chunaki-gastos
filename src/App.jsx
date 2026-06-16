@@ -2,17 +2,17 @@ import { useState } from "react";
 
 const ACTIVITIES = [
   { name: "Caminata en la selva Chunaki (día o noche)", gallons: 0 },
-  { name: "Caminata en la selva Vista Alegre", gallons: 15 },
-  { name: "Santuario de micos: Maikuchiga", gallons: 15 },
-  { name: "Aventura de campamento en la selva", gallons: 15 },
-  { name: "Avistamiento de perezosos y Victoria Regia: San Antonio + baño en lago", gallons: 20 },
-  { name: "Avistamiento de perezosos + baño en lago + visita Puerto Nariño", gallons: 20 },
-  { name: "Canotaje nativo en lago escondido: Puerto Alegre", gallons: 7 },
+  { name: "Caminata en la selva Vista Alegre", gallons: 7 },
+  { name: "Santuario de micos: Maikuchiga", gallons: 7 },
+  { name: "Aventura de campamento en la selva", gallons: 7 },
+  { name: "Avistamiento de perezosos y Victoria Regia: San Antonio + baño en lago", gallons: 14 },
+  { name: "Avistamiento de perezosos + baño en lago + visita Puerto Nariño", gallons: 14 },
+  { name: "Canotaje nativo en lago escondido: Puerto Alegre", gallons: 3 },
   { name: "Canotaje nativo en el río Amazonas o en la selva", gallons: 2 },
-  { name: "Avistamiento de delfines rosados", gallons: 10 },
+  { name: "Avistamiento de delfines rosados", gallons: 6 },
   { name: "Taller de palma de chambira", gallons: 0 },
-  { name: "Taller de plantas medicinales", gallons: 7 },
-  { name: "Ritual cultural indígena: Macedonia / Pto. Triunfo", gallons: 5 },
+  { name: "Taller de plantas medicinales", gallons: 3 },
+  { name: "Ritual cultural indígena: Libertad", gallons: 2 },
   { name: "Cocinar con Doña Marta", gallons: 0 },
 ];
 
