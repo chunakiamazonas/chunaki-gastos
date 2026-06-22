@@ -2,6 +2,7 @@ const { google } = require('googleapis');
 
 const SPREADSHEET_ID = '1TZRX2KjoH7igdMEuW1Yb8LxESILrhVhfUdiwXOf4K9w';
 const DRIVE_FOLDER_ID = '1f2YRsYSQHBx6wddHcaxw5m3_hLstAnwE';
+const MAX_ACTIVITIES = 6;
 
 function getAuth() {
   const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
@@ -15,45 +16,44 @@ function getAuth() {
 }
 
 async function getOrCreateMonthFolder(drive, date) {
-  const month = date.slice(0, 7); // e.g. "2026-06"
+  const month = date.slice(0, 7);
   const res = await drive.files.list({
     q: `name='${month}' and mimeType='application/vnd.google-apps.folder' and '${DRIVE_FOLDER_ID}' in parents and trashed=false`,
     fields: 'files(id)',
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
   });
-  if (res.data.files && res.data.files.length > 0) {
-    return res.data.files[0].id;
-  }
+  if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
   const folder = await drive.files.create({
     supportsAllDrives: true,
-    requestBody: {
-      name: month,
-      mimeType: 'application/vnd.google-apps.folder',
-      parents: [DRIVE_FOLDER_ID],
-    },
+    requestBody: { name: month, mimeType: 'application/vnd.google-apps.folder', parents: [DRIVE_FOLDER_ID] },
     fields: 'id',
   });
   return folder.data.id;
 }
 
-async function ensureHeaders(sheets) {
-  try {
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: SPREADSHEET_ID,
-      range: 'Sheet1!A1:N1',
-    });
-    if (!res.data.values || res.data.values.length === 0) {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SPREADSHEET_ID,
-        range: 'Sheet1!A1',
-        valueInputOption: 'RAW',
-        requestBody: {
-          values: [['Fecha','Guía','Grupo','Actividad','Galones Estimados','Galones Reales','Discrepancia','Proveedor','Monto','Moneda','Descripción','Fecha Factura','Link Foto','Hora Registro']]
-        }
-      });
-    }
-  } catch(e) {}
+// Ensures a sheet tab with the given title exists. Returns its sheetId.
+async function ensureSheet(sheets, title, headers) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+  const existing = meta.data.sheets.find(s => s.properties.title === title);
+  if (existing) return existing.properties.sheetId;
+
+  // Create the tab
+  const res = await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: { requests: [{ addSheet: { properties: { title } } }] },
+  });
+  const newSheetId = res.data.replies[0].addSheet.properties.sheetId;
+
+  // Write headers
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${title}!A1`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [headers] },
+  });
+
+  return newSheetId;
 }
 
 module.exports = async function handler(req, res) {
@@ -68,12 +68,32 @@ module.exports = async function handler(req, res) {
     const sheets = google.sheets({ version: 'v4', auth });
     const drive = google.drive({ version: 'v3', auth });
 
-    await ensureHeaders(sheets);
+    // Ensure both tabs exist with correct headers
+    await ensureSheet(sheets, 'Facturas', [
+      'Fecha', 'Guía', 'Grupo', 'Actividad',
+      'Proveedor', 'Monto', 'Moneda', 'Descripción', 'Fecha Factura',
+      'Link Foto', 'Hora Registro',
+    ]);
 
-    const { guide, groupName, date, activities, fuelEstimated, fuelActual, fuelConfirmed, invoices } = req.body;
+    const resumenHeaders = [
+      'Fecha', 'Guía', 'Grupo',
+      ...Array.from({ length: MAX_ACTIVITIES }, (_, i) => `Actividad ${i + 1}`),
+      'Galones Estimados', 'Galones Reales', 'Discrepancia', 'Hora Registro',
+    ];
+    await ensureSheet(sheets, 'Resumen', resumenHeaders);
+
+    const {
+      guide, groupName, date, activities,
+      fuelEstimated, fuelActual, fuelConfirmed, invoices,
+    } = req.body;
 
     const monthFolderId = await getOrCreateMonthFolder(drive, date);
-    const rows = [];
+    const timestamp = new Date().toLocaleTimeString('es-CO');
+    const actualGallons = fuelConfirmed ? fuelEstimated : (fuelActual || fuelEstimated);
+    const discrepancy = fuelConfirmed ? 'No' : 'Sí';
+
+    // ── Upload photos and build Facturas rows ──────────────────────────────
+    const facturasRows = [];
 
     for (let i = 0; i < activities.length; i++) {
       const activity = activities[i];
@@ -91,53 +111,66 @@ module.exports = async function handler(req, res) {
 
           const uploaded = await drive.files.create({
             supportsAllDrives: true,
-            requestBody: {
-              name: fileName,
-              parents: [monthFolderId],
-            },
-            media: {
-              mimeType: invoice.mimeType,
-              body: stream,
-            },
+            requestBody: { name: fileName, parents: [monthFolderId] },
+            media: { mimeType: invoice.mimeType, body: stream },
             fields: 'id, webViewLink',
           });
-
           await drive.permissions.create({
             fileId: uploaded.data.id,
             supportsAllDrives: true,
             requestBody: { role: 'reader', type: 'anyone' },
           });
-
           photoLink = uploaded.data.webViewLink || '';
-        } catch(photoErr) {
+        } catch (photoErr) {
           console.error('Photo upload error:', photoErr.message);
           photoLink = 'ERROR: ' + photoErr.message;
         }
       }
 
-      rows.push([
+      facturasRows.push([
         date || '',
         guide || '',
         groupName || '',
         activity.name || '',
-        fuelEstimated || 0,
-        fuelConfirmed ? fuelEstimated : (fuelActual || ''),
-        fuelConfirmed ? 'No' : 'Sí',
         (invoice.scanned && invoice.scanned.proveedor) || '',
         (invoice.scanned && invoice.scanned.monto_total) || '',
         (invoice.scanned && invoice.scanned.moneda) || '',
         (invoice.scanned && invoice.scanned.descripcion) || '',
         (invoice.scanned && invoice.scanned.fecha) || '',
         photoLink,
-        new Date().toLocaleTimeString('es-CO'),
+        timestamp,
       ]);
     }
 
+    // ── Build Resumen row (one row for the whole submission) ───────────────
+    const activityNames = activities.map(a => a.name || '');
+    // Pad to MAX_ACTIVITIES columns
+    while (activityNames.length < MAX_ACTIVITIES) activityNames.push('');
+
+    const resumenRow = [
+      date || '',
+      guide || '',
+      groupName || '',
+      ...activityNames,
+      fuelEstimated || 0,
+      actualGallons || 0,
+      discrepancy,
+      timestamp,
+    ];
+
+    // ── Write to both tabs ─────────────────────────────────────────────────
     await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'Sheet1!A1',
+      range: 'Facturas!A1',
       valueInputOption: 'RAW',
-      requestBody: { values: rows },
+      requestBody: { values: facturasRows },
+    });
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Resumen!A1',
+      valueInputOption: 'RAW',
+      requestBody: { values: [resumenRow] },
     });
 
     return res.status(200).json({ success: true });
